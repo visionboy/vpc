@@ -1,0 +1,33 @@
+# 모든 텍스트 파일 — Git이 자동 감지하여 저장소는 LF, 체크아웃은 OS 기본값
+* text=auto
+
+# Java / 빌드 파일 — 저장소 LF 고정
+*.java   text eol=lf
+*.xml    text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.properties text eol=lf
+*.sql    text eol=lf
+*.md     text eol=lf
+
+# 프론트엔드
+*.html   text eol=lf
+*.css    text eol=lf
+*.js     text eol=lf
+*.json   text eol=lf
+
+# 스크립트
+*.sh     text eol=lf
+*.bat    text eol=crlf
+
+# 바이너리 — 변환 없음
+*.jar    binary
+*.war    binary
+*.class  binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.zip    binary
