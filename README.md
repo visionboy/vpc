@@ -59,7 +59,7 @@ src/main/
 │   ├── static/
 │   │   ├── css/app.css      # 커스텀 스타일
 │   │   └── js/              # 기능별 분리된 JS 파일
-│   ├── templates/index.html # Thymeleaf 메인 페이지 (SPA)
+│   ├── templates/index.html # Thymeleaf 메인 페이지 1 (SPA)
 │   ├── application.yml
 │   └── application-local.yml
 ```
