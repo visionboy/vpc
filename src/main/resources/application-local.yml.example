@@ -1,0 +1,18 @@
+# 이 파일을 복사해 application-local.yml 로 이름을 바꾸고 실제 값을 채우세요.
+# application-local.yml 은 .gitignore 에 포함되어 커밋되지 않습니다.
+
+spring:
+  datasource:
+    url: jdbc:mariadb://<DB_HOST>:<DB_PORT>/<DB_NAME>?characterEncoding=UTF-8&serverTimezone=UTC
+    username: <DB_USERNAME>
+    password: <DB_PASSWORD>
+
+aws:
+  requester:
+    access-key: <AWS_ACCESS_KEY_ID>
+    secret-key: <AWS_SECRET_ACCESS_KEY>
+    region: ap-northeast-2
+  accounts:
+    accepter:
+      role-arn: arn:aws:iam::<ACCEPTER_ACCOUNT_ID>:role/VpcPeeringRole
+      region: ap-northeast-2

@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: vpc-peering-automation
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.mariadb.jdbc.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.company.vpc.domain, com.company.vpc.domain.enums
+  configuration:
+    map-underscore-to-camel-case: true
+    default-enum-type-handler: org.apache.ibatis.type.EnumTypeHandler
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+# AWS 계정 자격증명 설정
+# 상세 설명: docs/aws-cross-account-setup.md 참고
+aws:
+  # 요청자 계정 — IAM 사용자 장기 자격증명 (환경변수 필수)
+  requester:
+    access-key: ${AWS_REQUESTER_ACCESS_KEY}
+    secret-key: ${AWS_REQUESTER_SECRET_KEY}
+    region: ${AWS_REQUESTER_REGION:ap-northeast-2}
+
+  # 수락자 계정 목록 — AssumeRole 방식
+  accounts:
+    accepter:
+      role-arn: ${AWS_ACCEPTER_ROLE_ARN}
+      region: ${AWS_ACCEPTER_REGION:ap-northeast-2}
+      role-session-name: vpc-peering-session
+
+logging:
+  level:
+    com.company.vpc: DEBUG
+    software.amazon.awssdk: WARN

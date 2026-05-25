@@ -1,0 +1,1017 @@
+﻿<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPC Peering 자동화 콘솔</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container">
+        <span class="navbar-brand">&#128279; VPC Peering 자동화 콘솔</span>
+        <span class="text-secondary small">AWS 기준 — 멀티 CSP 확장 대응</span>
+    </div>
+</nav>
+
+<div id="toast-container"></div>
+
+<div class="container pb-5">
+
+    <ul class="nav nav-tabs mb-4" id="mainTab">
+        <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-create">
+                &#43; Peering 생성
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-active"
+                    onclick="loadActive()">&#9654; 활성 목록</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-history"
+                    onclick="loadHistory()">&#128196; 전체 이력</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-migrate"
+                    onclick="loadMigrateSource()">&#128260; Jumphost 이전</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-mig-history"
+                    onclick="loadMigrationHistory()">&#128203; 이전 이력</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+        <!-- ═══════════════ TAB 1: 생성 폼 ═══════════════ -->
+        <div class="tab-pane fade show active" id="tab-create">
+            <div class="card p-4">
+                <h5 class="mb-4 fw-bold">VPC Peering 생성</h5>
+
+                <div id="cidr-overlap-alert" class="alert alert-danger d-none" role="alert">
+                    ⚠️ 요청자와 수락자의 <strong>CIDR 대역이 겹칩니다</strong>.
+                    VPC Peering은 두 대역이 겹치지 않아야 합니다.
+                </div>
+
+                <form id="create-form" novalidate>
+                    <div class="mb-3">
+                        <label class="form-label">피어링 이름 <span class="text-muted small">(선택)</span></label>
+                        <input type="text" class="form-control" name="peeringName"
+                               placeholder="예: prod-vpc-peering-01" maxlength="100">
+                    </div>
+
+                    <!-- ── 요청자 / 수락자 2열 ── -->
+                    <div class="row g-3">
+                        <!-- 요청자 -->
+                        <div class="col-md-6">
+                            <div class="card p-3 bg-light h-100">
+                                <h6 class="fw-bold text-primary mb-3">&#9312; 요청자 (Requester)</h6>
+                                <div class="mb-2">
+                                    <label class="form-label">VPC ID <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="requesterVpcId"
+                                               name="requesterVpcId" placeholder="vpc-xxxxxxxxxxxxxxxxx" required>
+                                        <button type="button" class="btn btn-outline-primary"
+                                                onclick="loadVpcInfo('requester')">조회</button>
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">CIDR <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="requesterCidr"
+                                           name="requesterCidr" placeholder="10.1.0.0/16"
+                                           required oninput="checkCidrOverlap()">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">
+                                        라우팅 테이블 <span class="text-danger">*</span>
+                                        <span id="requester-rt-status" class="text-muted small ms-1"></span>
+                                    </label>
+                                    <select class="form-select" id="requesterRouteTableId"
+                                            name="requesterRouteTableId" required>
+                                        <option value="">VPC ID 입력 후 [조회] 클릭</option>
+                                    </select>
+                                </div>
+                                <div class="mb-0">
+                                    <label class="form-label">Account ID <span class="text-muted small">(크로스 계정 시만)</span></label>
+                                    <input type="text" class="form-control" name="requesterAccountId"
+                                           placeholder="123456789012">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 수락자 -->
+                        <div class="col-md-6">
+                            <div class="card p-3 bg-light h-100">
+                                <h6 class="fw-bold text-success mb-3">&#9313; Target (Accepter)</h6>
+                                <div class="mb-2">
+                                    <label class="form-label">VPC ID <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="accepterVpcId"
+                                               name="accepterVpcId" placeholder="vpc-xxxxxxxxxxxxxxxxx" required>
+                                        <button type="button" class="btn btn-outline-success"
+                                                onclick="loadVpcInfo('accepter')">조회</button>
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">CIDR <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="accepterCidr"
+                                           name="accepterCidr" placeholder="10.2.0.0/16"
+                                           required oninput="checkCidrOverlap()">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">
+                                        라우팅 테이블 <span class="text-danger">*</span>
+                                        <span id="accepter-rt-status" class="text-muted small ms-1"></span>
+                                    </label>
+                                    <select class="form-select" id="accepterRouteTableId"
+                                            name="accepterRouteTableId" required>
+                                        <option value="">VPC ID 입력 후 [조회] 클릭</option>
+                                    </select>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">보안 그룹 ID <span class="text-muted small">(ICMP 인바운드 자동 등록)</span></label>
+                                    <input type="text" class="form-control" name="accepterSecurityGroupId"
+                                           placeholder="sg-xxxxxxxxxxxxxxxxx">
+                                </div>
+                                <div class="mb-0">
+                                    <label class="form-label">Account ID <span class="text-muted small">(크로스 계정 시만)</span></label>
+                                    <input type="text" class="form-control" name="accepterAccountId"
+                                           placeholder="987654321098">
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- /row -->
+
+                    <!-- ── 요청자 VPC 리소스 패널 ── -->
+                    <div id="requester-resources-panel" class="d-none mt-3 resource-panel requester rounded p-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="fw-bold text-primary me-2">&#128290; 요청자 VPC 리소스</span>
+                            <code id="requester-vpc-badge" class="small text-muted"></code>
+                            <span class="ms-auto spinner-border spinner-border-sm text-primary d-none"
+                                  id="requester-res-spinner"></span>
+                        </div>
+                        <ul class="nav nav-tabs nav-sm mb-2" id="requesterResTabs">
+                            <li class="nav-item">
+                                <button class="nav-link active py-1 px-3 small"
+                                        data-bs-toggle="tab" data-bs-target="#req-ec2-pane">
+                                    EC2 <span id="requester-ec2-badge" class="badge bg-secondary ms-1">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link py-1 px-3 small"
+                                        data-bs-toggle="tab" data-bs-target="#req-rds-pane">
+                                    RDS <span id="requester-rds-badge" class="badge bg-secondary ms-1">0</span>
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="req-ec2-pane">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover mb-0 small align-middle">
+                                        <thead class="table-light">
+                                        <tr><th>인스턴스 ID</th><th>이름</th><th>타입</th>
+                                            <th>상태</th><th>Private IP</th><th>보안 그룹</th></tr>
+                                        </thead>
+                                        <tbody id="requester-ec2-tbody">
+                                            <tr><td colspan="6" class="text-muted text-center py-2">조회 전</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="req-rds-pane">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover mb-0 small align-middle">
+                                        <thead class="table-light">
+                                        <tr><th>DB 식별자</th><th>엔진</th><th>상태</th>
+                                            <th>엔드포인트</th><th>인스턴스 클래스</th><th>보안 그룹</th></tr>
+                                        </thead>
+                                        <tbody id="requester-rds-tbody">
+                                            <tr><td colspan="6" class="text-muted text-center py-2">조회 전</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── TARGET VPC 리소스 패널 ── -->
+                    <div id="accepter-resources-panel" class="d-none mt-3 resource-panel accepter rounded p-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="fw-bold text-success me-2">&#128290; TARGET VPC 리소스</span>
+                            <code id="accepter-vpc-badge" class="small text-muted"></code>
+                            <span class="ms-auto spinner-border spinner-border-sm text-success d-none"
+                                  id="accepter-res-spinner"></span>
+                        </div>
+                        <ul class="nav nav-tabs nav-sm mb-2" id="accepterResTabs">
+                            <li class="nav-item">
+                                <button class="nav-link active py-1 px-3 small"
+                                        data-bs-toggle="tab" data-bs-target="#acc-ec2-pane">
+                                    EC2 <span id="accepter-ec2-badge" class="badge bg-secondary ms-1">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link py-1 px-3 small"
+                                        data-bs-toggle="tab" data-bs-target="#acc-rds-pane">
+                                    RDS <span id="accepter-rds-badge" class="badge bg-secondary ms-1">0</span>
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="acc-ec2-pane">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover mb-0 small align-middle">
+                                        <thead class="table-light">
+                                        <tr><th>인스턴스 ID</th><th>이름</th><th>타입</th>
+                                            <th>상태</th><th>Private IP</th><th>보안 그룹</th></tr>
+                                        </thead>
+                                        <tbody id="accepter-ec2-tbody">
+                                            <tr><td colspan="6" class="text-muted text-center py-2">조회 전</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="acc-rds-pane">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover mb-0 small align-middle">
+                                        <thead class="table-light">
+                                        <tr><th>DB 식별자</th><th>엔진</th><th>상태</th>
+                                            <th>엔드포인트</th><th>인스턴스 클래스</th><th>보안 그룹</th></tr>
+                                        </thead>
+                                        <tbody id="accepter-rds-tbody">
+                                            <tr><td colspan="6" class="text-muted text-center py-2">조회 전</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-end">
+                        <button type="submit" class="btn btn-primary px-5" id="btn-create">
+                            &#128279; 피어링 연결하기
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ═══════════════ TAB 2: 활성 목록 ═══════════════ -->
+        <div class="tab-pane fade" id="tab-active">
+            <div class="card p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">활성 VPC Peering 목록</h5>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="loadActive()">&#8635;</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-dark">
+                        <tr><th>ID</th><th>Peering ID</th><th>이름</th>
+                            <th>요청자 VPC</th><th>TARGET VPC</th>
+                            <th>상태</th><th>생성일시</th><th>관리</th></tr>
+                        </thead>
+                        <tbody id="active-tbody">
+                        <tr><td colspan="8" class="text-center text-muted py-4">데이터를 불러오는 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ TAB 3: 전체 이력 ═══════════════ -->
+        <div class="tab-pane fade" id="tab-history">
+            <div class="card p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">전체 이력 조회</h5>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="loadHistory()">&#8635;</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-dark">
+                        <tr><th>ID</th><th>Peering ID</th><th>이름</th>
+                            <th>요청자</th><th>수락자</th>
+                            <th>상태</th><th>생성일시</th><th>삭제일시</th><th>스냅샷</th></tr>
+                        </thead>
+                        <tbody id="history-tbody">
+                        <tr><td colspan="9" class="text-center text-muted py-4">데이터를 불러오는 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ TAB 4: Jumphost 이전 ═══════════════ -->
+        <div class="tab-pane fade" id="tab-migrate">
+            <div class="card p-4">
+                <h5 class="mb-1 fw-bold">&#128260; Jumphost 이전 마법사</h5>
+                <p class="text-muted small mb-3">
+                    <strong>1단계</strong>: 신규 피어링만 추가 (기존 유지) &nbsp;|&nbsp;
+                    <strong>2단계</strong>: 연결 검증 후 완료(기존 삭제) 또는 롤백(신규 삭제)
+                </p>
+
+                <!-- 진행 표시기 -->
+                <div class="mb-4">
+                    <div class="progress" style="height:5px">
+                        <div class="progress-bar bg-primary transition-width" id="mig-progress-bar"
+                             role="progressbar" style="width:25%"></div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="fw-bold" id="mig-label-1" style="color:var(--bs-primary)">1. 피어링 선택</small>
+                        <small class="text-muted" id="mig-label-2">2. Target VPC 선택</small>
+                        <small class="text-muted" id="mig-label-3">3. 미리보기</small>
+                        <small class="text-muted" id="mig-label-4">4. 검증 및 완료</small>
+                    </div>
+                </div>
+
+                <!-- ── STEP 1: 기존 피어링 선택 ── -->
+                <div id="mig-panel-1">
+                    <div class="d-flex align-items-center mb-2 gap-2">
+                        <span class="badge bg-primary px-3 py-2">STEP 1</span>
+                        <strong>기존 Jumphost 피어링 선택</strong>
+                        <button class="btn btn-outline-secondary btn-sm ms-auto"
+                                onclick="loadMigrateSource()">&#8635; 새로고침</button>
+                    </div>
+                    <select class="form-select" id="migrate-source-select"
+                            onchange="onMigrateSourceChange()">
+                        <option value="">— 활성 피어링 선택 —</option>
+                    </select>
+
+                    <div id="migrate-existing-info" class="d-none mt-3">
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <div class="card border-warning h-100 p-3">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="badge bg-warning text-dark me-2" id="mig-badge-requester">교체 대상</span>
+                                        <span class="text-muted small" id="mig-old-name"></span>
+                                    </div>
+                                    <div class="small">
+                                        <div><span class="text-muted">VPC:</span> <code id="mig-old-req-vpc"></code></div>
+                                        <div><span class="text-muted">CIDR:</span> <code id="mig-old-req-cidr"></code></div>
+                                        <div><span class="text-muted">Peering ID:</span> <code id="mig-old-pcx"></code></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-center justify-content-center">
+                                <div style="font-size:2rem" class="text-muted">&#8596;</div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="card border-secondary h-100 p-3">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="badge bg-secondary me-2" id="mig-badge-accepter">수락자</span>
+                                        <button class="btn btn-outline-primary btn-sm ms-auto py-0 px-2"
+                                                onclick="openMigAccepterResources()">
+                                            &#128290; 연결된 자원
+                                        </button>
+                                    </div>
+                                    <div class="small">
+                                        <div><span class="text-muted">VPC:</span> <code id="mig-old-acc-vpc"></code></div>
+                                        <div><span class="text-muted">CIDR:</span> <code id="mig-old-acc-cidr"></code></div>
+                                        <div><span class="text-muted">라우팅:</span> <code id="mig-old-acc-rt"></code></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-end mt-3">
+                            <button class="btn btn-primary" onclick="migGoStep(2)">다음 단계 &#8594;</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STEP 2: 신규 Jumphost 설정 ── -->
+                <div id="mig-panel-2" class="d-none">
+                    <div class="d-flex align-items-center mb-3 gap-2">
+                        <span class="badge bg-success px-3 py-2">STEP 2</span>
+                        <strong>Target Jumphost 설정</strong>
+                    </div>
+                    <div class="card p-3 bg-light">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Account ID <span class="text-muted small">(크로스 계정 시만)</span></label>
+                                <input type="text" class="form-control" id="mig-new-account-id"
+                                       placeholder="123456789012">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold text-success">
+                                    Target Jumphost VPC ID <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="mig-new-vpc-id"
+                                           placeholder="vpc-xxxxxxxxxxxxxxxxx"
+                                           oninput="migCidrCheck()">
+                                    <button type="button" class="btn btn-outline-success"
+                                            onclick="loadMigNewRouteTables()">조회</button>
+                                </div>
+                                <div id="mig-vpc-warn" class="d-none mt-2 p-2 rounded small fw-semibold"
+                                     style="background:#fff3cd;border:1px solid #ffc107;color:#856404"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-success">
+                                    CIDR <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="mig-new-cidr"
+                                       placeholder="10.3.0.0/16" oninput="migCidrCheck()">
+                                <div id="mig-cidr-warn" class="d-none mt-2 p-2 rounded small fw-semibold"
+                                     style="background:#fff3cd;border:1px solid #ffc107;color:#856404"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-success">
+                                    라우팅 테이블 <span class="text-danger">*</span>
+                                    <span id="mig-rt-status" class="text-muted small ms-1"></span>
+                                </label>
+                                <select class="form-select" id="mig-new-rt-id" onchange="migCidrCheck()">
+                                    <option value="">VPC ID 입력 후 [조회] 클릭</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-end mt-3">
+                        <button class="btn btn-outline-secondary px-4 fw-bold" onclick="migGoStep(1)">&#8592; 이전</button>
+                        <button class="btn btn-success" id="btn-mig-step2-next"
+                                onclick="migStep2Next()" disabled>
+                            미리보기 확인 &#8594;
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── STEP 3: 미리보기 (신규 피어링만 생성, 기존 유지) ── -->
+                <div id="mig-panel-3" class="d-none">
+                    <div class="d-flex align-items-center mb-3 gap-2">
+                        <span class="badge bg-warning text-dark px-3 py-2">STEP 3</span>
+                        <strong>실행 내용 미리보기</strong>
+                    </div>
+                    <div class="alert alert-info small mb-3">
+                        <strong>&#8505;&#65039; 이 단계에서는 신규 피어링만 생성합니다.</strong>
+                        기존 피어링은 그대로 유지됩니다.<br>
+                        생성 후 직접 연결을 확인하고 "완료" 또는 "롤백"을 선택하세요.
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-5">
+                            <div class="card border-success p-3 h-100">
+                                <div class="fw-bold text-success mb-2">&#10003; 신규항목</div>
+                                <div class="small">
+                                    <div><code id="prev-new-vpc"></code> <span class="text-muted" id="prev-new-vpc-name"></span></div>
+                                    <div class="text-muted"><code id="prev-new-cidr"></code></div>
+                                    <div class="my-1 text-center">&#8597; 피어링 &#8597;</div>
+                                    <div><code id="prev-acc-vpc"></code> <span class="text-muted" id="prev-acc-vpc-name"></span></div>
+                                    <div class="text-muted"><code id="prev-acc-cidr"></code></div>
+                                </div>
+                                <div class="mt-2 text-success small">라우팅 테이블 + SG 규칙 포함 설정</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-center justify-content-center">
+                            <div class="text-center" style="line-height:1.8">
+                                <div style="font-size:2rem; color:#0d6efd;">&#8594;</div>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="card border-warning p-3 h-100">
+                                <div class="fw-bold text-warning mb-2">&#9888; 기존항목</div>
+                                <div class="small">
+                                    <div><code id="prev-old-req-vpc"></code> <span class="text-muted" id="prev-old-req-vpc-name"></span></div>
+                                    <div class="text-muted"><code id="prev-old-req-cidr"></code></div>
+                                    <div class="my-1 text-center">&#8597; 피어링 &#8597;</div>
+                                    <div><code id="prev-acc-vpc2"></code> <span class="text-muted" id="prev-acc-vpc2-name"></span></div>
+                                    <div class="text-muted"><code id="prev-acc-cidr2"></code></div>
+                                </div>
+                                <div class="mt-2 text-muted small">이 단계에서는 삭제하지 않음</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button class="btn btn-outline-secondary px-4 fw-bold" onclick="migGoStep(2)">&#8592; 이전</button>
+                        <button class="btn btn-success px-5 fw-bold" id="btn-migrate-start"
+                                onclick="executeMigrateStart()">실행
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── STEP 4: 연결 검증 + 완료 / 롤백 ── -->
+                <div id="mig-panel-4" class="d-none">
+                    <div class="d-flex align-items-center mb-3 gap-2">
+                        <span class="badge bg-primary px-3 py-2">STEP 4</span>
+                        <strong>연결 검증 후 완료 또는 롤백 선택</strong>
+                    </div>
+                    <div class="alert alert-success mb-3">
+                        <h6 class="fw-bold">&#10003; 신규 피어링 생성 완료</h6>
+                        <div id="mig-start-result-msg" class="small"></div>
+                    </div>
+                    <div class="alert alert-warning small mb-3">
+                        <strong>&#9888; 아직 기존 피어링은 유지 중입니다.</strong><br>
+                        신규 Jumphost(VPC-C)에서 VPC-B 자원으로의 연결을 직접 확인한 후 아래를 선택하세요.
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-success p-3 h-100">
+                                <div class="fw-bold text-success mb-2">&#10003; 신규 피어링 (생성됨)</div>
+                                <div class="small" id="mig-new-peering-card">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-warning p-3 h-100">
+                                <div class="fw-bold text-warning mb-2">&#9888; 기존 피어링 (아직 유지 중)</div>
+                                <div class="small" id="mig-old-peering-card">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-3 justify-content-center">
+                        <button class="btn btn-danger px-5 fw-bold" onclick="openMigCompleteModal()">
+                            &#10003; 완료
+                        </button>
+                        <button class="btn btn-outline-secondary px-4" onclick="openMigRollbackModal()">
+                            &#8617; 롤백
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── 최종 결과 ── -->
+                <div id="mig-final-result" class="d-none mt-3">
+                    <div class="alert mb-3" id="mig-final-alert">
+                        <h6 class="fw-bold" id="mig-final-title"></h6>
+                        <div id="mig-final-msg" class="small"></div>
+                    </div>
+                    <div class="alert alert-info small mb-3" id="mig-snapshot-guide" style="display:none">
+                        <strong>&#128247; 스냅샷 저장 안내</strong>
+                        <ul class="mb-0 mt-1">
+                            <li><strong>신규 피어링</strong>의 스냅샷에는 이전 전 VPC-B 라우팅 테이블·보안 그룹 상태가 저장됩니다.</li>
+                            <li><strong>삭제된 기존 피어링</strong>의 스냅샷에는 삭제 시점 상태가 저장됩니다.</li>
+                            <li class="mt-1">
+                                <a href="#" onclick="document.querySelector('[data-bs-target=\'#tab-history\']').click(); loadHistory(); return false;">
+                                    &#128196; 전체 이력 탭
+                                </a>에서 스냅샷 버튼으로 확인하세요.
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="text-center">
+                        <button class="btn btn-outline-primary" onclick="resetMigration()">
+                            &#8617; 처음부터 다시
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ══ 이전 이력 탭 ════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="tab-mig-history">
+            <div class="card p-4">
+                <div class="d-flex align-items-center mb-3 gap-2">
+                    <h5 class="mb-0">&#128203; Jumphost 이전 이력</h5>
+                    <button class="btn btn-outline-secondary btn-sm ms-auto"
+                            onclick="loadMigrationHistory()">&#8635; 새로고침</button>
+                </div>
+
+                <div id="mig-history-loading" class="text-center text-muted py-4 d-none">
+                    <div class="spinner-border spinner-border-sm me-2"></div>불러오는 중...
+                </div>
+                <div id="mig-history-empty" class="text-center text-muted py-4 d-none">이전 이력이 없습니다.</div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle" id="mig-history-table">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width:60px">ID</th>
+                                <th>AS-IS (기존 Jumphost)</th>
+                                <th>TO-BE (신규 Jumphost)</th>
+                                <th>RESOURCE VPC</th>
+                                <th style="width:110px">상태</th>
+                                <th style="width:150px">이전 시작</th>
+                                <th style="width:240px">작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mig-history-body"></tbody>
+                    </table>
+                </div>
+                <div id="mig-history-pagination" class="d-flex justify-content-center mt-2"></div>
+            </div>
+        </div>
+
+    </div><!-- /tab-content -->
+</div>
+
+<!-- ══ 이전 이력 상세 모달 ══════════════════════════════════ -->
+<div class="modal fade" id="migDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">&#128203; 이전 이력 상세</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- AS-IS / TO-BE 요약 카드 -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-5">
+                        <div class="card border-warning p-3 h-100">
+                            <div class="badge bg-warning text-dark mb-2 d-inline-block" style="width:fit-content">AS-IS (기존 Jumphost)</div>
+                            <div class="small" id="mig-detail-old-info"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-center justify-content-center text-muted">
+                        <div style="font-size:2rem">&#8594;</div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="card border-success p-3 h-100">
+                            <div class="badge bg-success mb-2 d-inline-block" style="width:fit-content">TO-BE (신규 Jumphost)</div>
+                            <div class="small" id="mig-detail-new-info"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AS-IS / TO-BE 탭 + 요약/JSON 토글 -->
+                <div class="d-flex justify-content-between align-items-end mb-0">
+                    <ul class="nav nav-tabs flex-grow-1" id="migDetailTab">
+                        <li class="nav-item">
+                            <button class="nav-link active" data-bs-toggle="tab"
+                                    data-bs-target="#mig-detail-asis">
+                                &#128247; AS-IS
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="tab"
+                                    data-bs-target="#mig-detail-tobe">
+                                &#9881; TO-BE
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="btn-group btn-group-sm ms-3 mb-1 flex-shrink-0" role="group">
+                        <button type="button" class="btn btn-primary" id="btn-mig-summary"
+                                onclick="setMigDetailView('summary')">요약</button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-mig-json"
+                                onclick="setMigDetailView('json')">JSON</button>
+                    </div>
+                </div>
+                <div class="tab-content border rounded-bottom p-3">
+                    <div class="tab-pane fade show active" id="mig-detail-asis">
+                        <div id="mig-detail-asis-summary"><div class="text-muted">스냅샷 불러오는 중...</div></div>
+                        <div id="mig-detail-asis-json" style="display:none"></div>
+                    </div>
+                    <div class="tab-pane fade" id="mig-detail-tobe">
+                        <div id="mig-detail-tobe-summary"><div class="text-muted">[TO-BE 현재 상태] 탭 클릭 시 AWS 실시간 조회</div></div>
+                        <div id="mig-detail-tobe-json" style="display:none"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" onclick="openMigChangeHistory()">
+                    &#128260; 변경 내역 보기
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 이전 이력 — 변경 내역 비교 모달 ════════════════════════ -->
+<div class="modal fade" id="migChangeHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">&#128260; 변경 내역 확인 — <span id="mig-ch-id"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 탭 -->
+                <ul class="nav nav-tabs mb-3" id="migChTab">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#mig-ch-rt">
+                            &#128195; 라우팅 테이블
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#mig-ch-sg">
+                            &#128274; 보안 그룹
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- 라우팅 테이블 탭 -->
+                    <div class="tab-pane fade show active" id="mig-ch-rt">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-warning bg-opacity-25 py-2 d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold small">&#128247; 이전 (AS-IS)</span>
+                                        <span class="badge bg-warning text-dark" id="mig-ch-rt-asis-rtbid"></span>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="mig-ch-rt-asis" class="p-3 text-muted small">불러오는 중...</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-success bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold small">&#9881; 이후 (TO-BE 현재)</span>
+                                        <span class="badge bg-success" id="mig-ch-rt-tobe-rtbid"></span>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="mig-ch-rt-tobe" class="p-3 text-muted small">불러오는 중...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 보안 그룹 탭 -->
+                    <div class="tab-pane fade" id="mig-ch-sg">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-warning bg-opacity-25 py-2 d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold small">&#128247; 이전 (AS-IS)</span>
+                                        <span class="badge bg-warning text-dark" id="mig-ch-sg-asis-sgid"></span>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="mig-ch-sg-asis" class="p-3 text-muted small">불러오는 중...</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-success bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold small">&#9881; 이후 (TO-BE 현재)</span>
+                                        <span class="badge bg-success" id="mig-ch-sg-tobe-sgid"></span>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="mig-ch-sg-tobe" class="p-3 text-muted small">불러오는 중...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 이력 롤백 확인 모달 ══════════════════════════════════ -->
+<div class="modal fade" id="migHistoryRollbackModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">&#9888; 이전 롤백 확인</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>이 이전 이력을 <strong>롤백</strong>하시겠습니까?</p>
+                <div id="mig-history-rollback-info" class="alert alert-warning small mb-0"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-danger" onclick="executeHistoryRollback()">롤백 실행</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 이전 이력 — 진행중 완료 확인 모달 ════════════════════ -->
+<div class="modal fade" id="migHistoryCompleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">&#9888; 기존 피어링 삭제 확인</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>아래 기존 피어링을 <strong>영구 삭제</strong>합니다.</p>
+                <div id="mig-history-complete-info" class="alert alert-danger small mb-3"></div>
+                <ul class="text-danger small mb-0">
+                    <li>VPC Peering 연결</li>
+                    <li>양방향 라우팅 테이블 경로</li>
+                    <li>보안 그룹 ICMP 인바운드 규칙</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-danger" onclick="executeHistoryComplete()">완료 확인 (기존 삭제)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 보안 그룹 상세 모달 ══════════════════════════════════ -->
+<div class="modal fade" id="sgModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title" id="sg-modal-title">보안 그룹 상세</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="sg-modal-body">
+                <p class="text-center text-muted">불러오는 중...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 스냅샷 모달 ══════════════════════════════════════════ -->
+<div class="modal fade" id="snapshotModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">&#128247; 네트워크 스냅샷 뷰어</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="snapshot-modal-body"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 삭제 확인 모달 ═══════════════════════════════════════ -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">&#9888; VPC Peering 해제 확인</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>아래 리소스가 <strong>영구 삭제</strong>됩니다.</p>
+                <ul class="text-danger small">
+                    <li>VPC Peering 연결</li>
+                    <li>양방향 라우팅 테이블 경로</li>
+                    <li>보안 그룹 ICMP 인바운드 규칙 (설정된 경우)</li>
+                </ul>
+                <p class="mb-0 text-muted small">삭제 전 스냅샷이 자동 저장됩니다.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-danger" id="btn-confirm-delete">삭제 확인</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Jumphost 이전 — 수락자(VPC-B) 연결 자원 모달 ══════ -->
+<div class="modal fade" id="migAccepterResourceModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white py-2">
+                <h5 class="modal-title small fw-bold">
+                    &#128290; Target 연결 자원 &mdash;
+                    <code class="text-white" id="mig-acc-res-vpc-id"></code>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <ul class="nav nav-tabs px-3 pt-2 border-bottom-0">
+                    <li class="nav-item">
+                        <button class="nav-link active small py-1" data-bs-toggle="tab"
+                                data-bs-target="#mig-acc-ec2-pane">
+                            EC2 <span id="mig-acc-ec2-badge" class="badge bg-secondary ms-1">-</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1" data-bs-toggle="tab"
+                                data-bs-target="#mig-acc-rds-pane">
+                            RDS <span id="mig-acc-rds-badge" class="badge bg-secondary ms-1">-</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1" data-bs-toggle="tab"
+                                data-bs-target="#mig-acc-rt-pane">
+                            라우팅 테이블
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1" data-bs-toggle="tab"
+                                data-bs-target="#mig-acc-sg-pane">
+                            보안 그룹
+                        </button>
+                    </li>
+                </ul>
+                <div class="tab-content p-3">
+
+                    <!-- EC2 탭 -->
+                    <div class="tab-pane fade show active" id="mig-acc-ec2-pane">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0 small align-middle">
+                                <thead class="table-light">
+                                    <tr><th>인스턴스 ID</th><th>이름</th><th>타입</th>
+                                        <th>상태</th><th>Private IP</th><th>보안 그룹</th></tr>
+                                </thead>
+                                <tbody id="mig-acc-ec2-tbody">
+                                    <tr><td colspan="6" class="text-muted text-center py-3">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>불러오는 중...
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- RDS 탭 -->
+                    <div class="tab-pane fade" id="mig-acc-rds-pane">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0 small align-middle">
+                                <thead class="table-light">
+                                    <tr><th>DB 식별자</th><th>엔진</th><th>상태</th>
+                                        <th>엔드포인트</th><th>인스턴스 클래스</th><th>보안 그룹</th></tr>
+                                </thead>
+                                <tbody id="mig-acc-rds-tbody">
+                                    <tr><td colspan="6" class="text-muted text-center py-3">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>불러오는 중...
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 라우팅 테이블 탭 -->
+                    <div class="tab-pane fade" id="mig-acc-rt-pane">
+                        <div id="mig-acc-rt-content">
+                            <p class="text-muted text-center py-3">
+                                <span class="spinner-border spinner-border-sm me-1"></span>불러오는 중...
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 보안 그룹 탭 -->
+                    <div class="tab-pane fade" id="mig-acc-sg-pane">
+                        <div id="mig-acc-sg-content">
+                            <p class="text-muted text-center py-3">
+                                <span class="spinner-border spinner-border-sm me-1"></span>불러오는 중...
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <span class="text-muted small me-auto">account: accepter</span>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Jumphost 이전 완료 확인 모달 ════════════════════════ -->
+<div class="modal fade" id="migCompleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">&#9888; 기존 피어링 삭제 확인</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>아래 기존 피어링을 <strong>영구 삭제</strong>합니다.</p>
+                <ul class="text-danger small">
+                    <li>VPC Peering 연결</li>
+                    <li>양방향 라우팅 테이블 경로</li>
+                    <li>보안 그룹 ICMP 인바운드 규칙</li>
+                </ul>
+                <p class="mb-0 text-muted small">삭제 전 스냅샷이 자동 저장됩니다.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-danger" id="btn-confirm-mig-complete">
+                    완료 확인 (기존 삭제)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Jumphost 롤백 확인 모달 ══════════════════════════════ -->
+<div class="modal fade" id="migRollbackModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">&#8617; 신규 피어링 롤백 확인</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>방금 생성한 <strong>신규 피어링을 삭제</strong>합니다.</p>
+                <ul class="small">
+                    <li>신규 VPC Peering 연결 (VPC-C ↔ VPC-B)</li>
+                    <li>신규 라우팅 테이블 경로</li>
+                    <li>신규 보안 그룹 ICMP 인바운드 규칙</li>
+                </ul>
+                <p class="mb-0 text-success small">기존 피어링은 계속 유지됩니다.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-warning text-dark" id="btn-confirm-mig-rollback">
+                    롤백 확인 (신규 삭제)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script th:src="@{/js/utils.js}"></script>
+<script th:src="@{/js/cidr.js}"></script>
+<script th:src="@{/js/diff-render.js}"></script>
+<script th:src="@{/js/peering-create.js}"></script>
+<script th:src="@{/js/peering-list.js}"></script>
+<script th:src="@{/js/migration-wizard.js}"></script>
+<script th:src="@{/js/migration-history.js}"></script>
+
+</body>
+</html>

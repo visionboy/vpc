@@ -1,0 +1,17 @@
+        body { background:#f8f9fa; }
+        .navbar-brand { font-weight:700; letter-spacing:1px; }
+        .card { border:none; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+        pre.snapshot-json { background:#1e1e1e; color:#d4d4d4; border-radius:6px;
+                            padding:1rem; font-size:.78rem; max-height:420px; overflow-y:auto; }
+        #toast-container { position:fixed; top:1.2rem; right:1.2rem; z-index:9999; }
+        .cidr-ok   { border-color:#198754 !important; }
+        .cidr-warn { border-color:#dc3545 !important; }
+        .resource-panel { border-left:3px solid; }
+        .resource-panel.requester { border-color:#0d6efd; }
+        .resource-panel.accepter  { border-color:#198754; }
+        .instance-row:hover { background:#f0f4ff; cursor:pointer; }
+        .sg-tag { font-size:.72rem; background:#e9ecef; border-radius:4px;
+                  padding:1px 5px; display:inline-block; margin:1px; }
+        .rule-badge { font-size:.7rem; }
+        .modal-dialog { display:flex; align-items:center; min-height:calc(100% - 3.5rem); }
+        .modal-content { min-height:300px; }

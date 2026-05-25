@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.company.vpc.mapper.PeeringHistoryMapper">
+
+    <resultMap id="peeringHistoryMap" type="PeeringHistory">
+        <id     property="id"                      column="id"/>
+        <result property="peeringConnectionId"     column="peering_connection_id"/>
+        <result property="peeringName"             column="peering_name"/>
+        <result property="cspType"                 column="csp_type"/>
+        <result property="requesterVpcId"          column="requester_vpc_id"/>
+        <result property="requesterCidr"           column="requester_cidr"/>
+        <result property="requesterAccountId"      column="requester_account_id"/>
+        <result property="requesterRouteTableId"   column="requester_route_table_id"/>
+        <result property="accepterVpcId"           column="accepter_vpc_id"/>
+        <result property="accepterCidr"            column="accepter_cidr"/>
+        <result property="accepterAccountId"       column="accepter_account_id"/>
+        <result property="accepterRouteTableId"    column="accepter_route_table_id"/>
+        <result property="accepterSecurityGroupId" column="accepter_security_group_id"/>
+        <result property="status"                  column="status"/>
+        <result property="createdAt"               column="created_at"/>
+        <result property="updatedAt"               column="updated_at"/>
+        <result property="deletedAt"               column="deleted_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="PeeringHistory"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO peering_history (
+            peering_connection_id, peering_name, csp_type,
+            requester_vpc_id, requester_cidr, requester_account_id, requester_route_table_id,
+            accepter_vpc_id,  accepter_cidr,  accepter_account_id,  accepter_route_table_id,
+            accepter_security_group_id, status, created_at, updated_at
+        ) VALUES (
+            #{peeringConnectionId}, #{peeringName}, #{cspType},
+            #{requesterVpcId}, #{requesterCidr}, #{requesterAccountId}, #{requesterRouteTableId},
+            #{accepterVpcId},  #{accepterCidr},  #{accepterAccountId},  #{accepterRouteTableId},
+            #{accepterSecurityGroupId}, #{status}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="update" parameterType="PeeringHistory">
+        UPDATE peering_history
+        SET peering_connection_id     = #{peeringConnectionId},
+            status                    = #{status},
+            deleted_at                = #{deletedAt},
+            updated_at                = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="peeringHistoryMap">
+        SELECT * FROM peering_history WHERE id = #{id}
+    </select>
+
+    <select id="findByStatus" resultMap="peeringHistoryMap">
+        SELECT * FROM peering_history
+        WHERE status = #{status}
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(*) FROM peering_history WHERE status = #{status}
+    </select>
+
+    <select id="findAll" resultMap="peeringHistoryMap">
+        SELECT * FROM peering_history
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM peering_history
+    </select>
+
+</mapper>

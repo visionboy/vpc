@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.company.vpc.mapper.JumphostMigrationHistoryMapper">
+
+    <resultMap id="migrationHistoryMap" type="JumphostMigrationHistory">
+        <id     property="id"            column="id"/>
+        <result property="oldPeeringId"  column="old_peering_id"/>
+        <result property="newPeeringId"  column="new_peering_id"/>
+        <result property="status"        column="status"/>
+        <result property="completedAt"   column="completed_at"/>
+        <result property="createdAt"     column="created_at"/>
+        <result property="updatedAt"     column="updated_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="JumphostMigrationHistory"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO jumphost_migration_history (
+            old_peering_id, new_peering_id, status,
+            completed_at, created_at, updated_at
+        ) VALUES (
+            #{oldPeeringId}, #{newPeeringId}, #{status},
+            #{completedAt}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="update" parameterType="JumphostMigrationHistory">
+        UPDATE jumphost_migration_history
+        SET status       = #{status},
+            completed_at = #{completedAt},
+            updated_at   = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="migrationHistoryMap">
+        SELECT * FROM jumphost_migration_history WHERE id = #{id}
+    </select>
+
+    <select id="findAll" resultMap="migrationHistoryMap">
+        SELECT * FROM jumphost_migration_history
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM jumphost_migration_history
+    </select>
+
+</mapper>
