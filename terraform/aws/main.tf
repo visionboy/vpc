@@ -185,7 +185,7 @@ resource "aws_instance" "ec2_a_v3" {
 
 
 # ==========================================
-# [VPC-B] RDS MariaDB 설정
+# [VPC-B] RDS MariaDB 설정 (프리티어 무료 사양 적용)
 # ==========================================
 
 # RDS MariaDB 인스턴스 생성
@@ -193,9 +193,16 @@ resource "aws_db_instance" "maria_db" {
   identifier             = "aws-maria"               # DB 식별자
   engine                 = "mariadb"                 # 엔진
   engine_version         = "10.11"                   # MariaDB 메이저 버전
-  instance_class         = "db.t4g.micro"            # 클래스 크기
-  allocated_storage      = 20                        # 기본 할당 용량 (GiB)
-  max_allocated_storage  = 100                       # 스토리지 자동 확장 최대치
+  
+  # ⚠️ 프리티어 전용 인스턴스 클래스로 변경 (db.t4g.micro는 프리티어 제외 대상)
+  instance_class         = "db.t3.micro"            
+  
+  # ⚠️ 프리티어 최대 무료 한도인 gp3 20GiB 고정
+  allocated_storage      = 20                        
+  storage_type           = "gp3"                     
+
+  # ⚠️ 스토리지 자동 확장은 프리티어 용량(20GB)을 초과하여 비용을 발생시킬 수 있으므로 제거합니다.
+  # max_allocated_storage  = 100                       
 
   username               = "admin"                   # 마스터 사용자 이름
   password               = "s123456A!"               # 마스터 비밀번호
@@ -204,7 +211,7 @@ resource "aws_db_instance" "maria_db" {
   vpc_security_group_ids = ["sg-0d770546a5c29fcf4"]  # 사용 보안그룹 ID 주입
   availability_zone      = "ap-northeast-2a"         # 요청하신 리전 및 AZ 고정
 
-  multi_az               = false                     # 다중 AZ: "아니요"
+  multi_az               = false                     # 다중 AZ: "아니요" (프리티어 필수 조건)
   publicly_accessible    = false                     # 외부 공개 차단
   skip_final_snapshot    = true                      # 삭제 시 최종 스냅샷 생성 스킵
 
