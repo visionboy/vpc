@@ -85,11 +85,10 @@ replay_pid*
 # Terraform (절대 커밋 금지)
 # ─────────────────────────────────────────────────────────────────────────
 # 프로바이더 바이너리 및 플러그인 캐시 (수백 MB)
-terraform/.terraform/
-.terraform/
+**/.terraform/
+# 의존성 잠금 파일 — 로컬 OS/아키텍처 해시 포함, 재생성 가능
+**/.terraform.lock.hcl
 # 상태 파일 — 인프라 민감 정보 포함
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
 *.tfstate
 *.tfstate.*
 # tfvars — 민감 변수값 포함 가능
